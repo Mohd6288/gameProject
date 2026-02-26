@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Platform Adventure is a professional, multi-level 2D platformer game built with p5.js (v1.4.1). The game features 5 progressively difficult levels with smooth animations, particle effects, power-ups, enemies, and full mobile/desktop support with touch controls.
+Platform Adventure is a professional, multi-level 2D platformer game built with p5.js (v1.4.1). The game features 5 progressively difficult levels with smooth animations, particle effects, power-ups, enemies, weather systems, dash/wall-jump mechanics, combo scoring, and full mobile/desktop support with touch controls.
 
 ## Running the Game
 
@@ -16,206 +16,93 @@ python -m http.server 8000
 # Navigate to http://localhost:8000
 ```
 
-**Mobile testing:** Access via local network IP for testing on actual mobile devices.
+## File Structure
+
+```
+gameProject/
+├── index.html              — Entry point, loading screen, fullscreen, mobile optimizations
+├── CLAUDE.md               — This file (project docs for Claude Code)
+├── src/
+│   └── sketch.js           — All game logic (14 well-organized sections, ~1200 lines)
+├── sounds/
+│   ├── lifelike-126735.mp3         — Background music
+│   ├── cartoon-jump-6462.mp3      — Jump sound
+│   ├── collect-5930.mp3           — Coin/power-up collection
+│   ├── goodresult-82807.mp3       — Level complete
+│   ├── negative_beeps-6008.mp3    — Lose life / game over
+│   └── running-in-grass-6237.mp3  — Walk sound
+└── libs/
+    └── p5.min.js           — p5.js local fallback
+```
+
+## Code Architecture (sketch.js — 14 Sections)
+
+1. **Configuration & Constants** — `CONFIG` object with all tunable game parameters
+2. **Game State Variables** — Character (`char` object), camera, input, weather, combo system
+3. **p5.js Lifecycle** — `preload()`, `setup()`, `draw()` with state routing
+4. **Level Generation** — `initializeLevel()` procedurally generates all objects per level
+5. **Rendering — Background** — Gradient sky, day/night cycle, stars, mountains (parallax), clouds
+6. **Rendering — Game Objects** — Collectables, power-ups, enemies (with AI), flagpole
+7. **Rendering — Character** — Full articulated character with arms, legs, hair, expressions
+8. **Rendering — UI & Screens** — HUD, menu, pause, game over, level complete screens
+9. **Physics & Movement** — Gravity, jumping, dashing, wall-sliding, platform riding, wind
+10. **Collision Detection** — Canyon, collectable, enemy (stomp or damage), power-up, flagpole
+11. **Game Logic** — Lives, scoring, combos, high score (localStorage), state transitions
+12. **Visual Effects** — Particles (burst/dust/spark), screen shake, weather (rain/snow/storm/wind)
+13. **Input Handling** — Keyboard (A/D/W/Shift/P/Arrows), touch controls with multi-button
+14. **Utility Functions** — Window resize handler
+
+## Key Design Patterns
+
+- **All coordinates are world-space.** `char.x` and all object positions share the same coordinate system. The camera translates in `draw()` only for rendering. Collision checks use raw positions directly — never add/subtract camera offsets.
+- **Character state** is stored in the `char` object (position, velocity, flags).
+- **CONFIG object** centralizes all magic numbers for easy tuning.
+- **Velocity-based physics** — character has `vx`/`vy` with gravity each frame, capped by `MAX_FALL_SPEED`.
 
 ## Game Features
 
-### Multi-Level System
-- 5 levels with progressive difficulty (sketch.js:9)
-- Level length increases by 500px per level (sketch.js:124)
-- More enemies, canyons, and collectables added each level (sketch.js:125-127)
-- Platforms introduced from level 2 onwards (sketch.js:190-200)
-- Power-ups available from level 2+ (sketch.js:203-213)
+### Controls
+- **Desktop:** A/D or Arrow Keys = move, W or Up = jump, Shift = dash, P = pause, Space = menu actions
+- **Mobile:** On-screen buttons for left/right/jump/dash, tap for menu actions
 
-### Game States
-The game uses a state machine with 5 states (sketch.js:7):
-- `menu`: Main menu with instructions
-- `playing`: Active gameplay
-- `paused`: Pause overlay (press P)
-- `gameOver`: Death screen with score display
-- `levelComplete`: Victory screen with level progression
+### Movement Mechanics
+- **Dash** (Shift): Short burst of speed with cooldown. Cancels vertical momentum. Screen shake on use.
+- **Wall Jump**: Slide down platform walls and jump off them for advanced movement.
+- **Jump Buffering**: Jump inputs within 8 frames of landing are remembered and executed on touchdown.
 
-### Lives & Respawn System
-- Players start with 3 lives (sketch.js:10)
-- Losing a life respawns player with 3 seconds of invincibility (sketch.js:800-801)
-- Game over occurs when all lives are lost (sketch.js:803)
+### Combat
+- **Enemy Stomping**: Land on enemies from above to destroy them (+25 pts, bounce up).
+- **Invincible Kill**: While invincible, touching enemies destroys them.
 
-### Power-Up System
-Three types of power-ups (sketch.js:208):
-- **Invincibility** (purple star): 5 seconds of invulnerability (sketch.js:762-764)
-- **Extra Life** (pink heart): Adds one life, max 5 (sketch.js:765-766)
-- **Score Boost** (blue plus): +50 points instantly (sketch.js:767-768)
+### Combo System
+- Collecting coins/stomping enemies in quick succession builds a combo multiplier.
+- 90-frame window between actions to maintain combo. Each combo level adds +0.5x multiplier.
 
-### Particle Effects System
-Dynamic particle system for visual feedback (sketch.js:616-649):
-- Coin collection: Golden particles
-- Power-up collection: Purple particles
-- Enemy collision: Red particles
-- Particles have physics (gravity, velocity, fade-out)
+### Weather System (per level)
+- Level 1: Clear
+- Level 2: Wind (affects airborne movement, sways trees)
+- Level 3: Rain (visual rain particles)
+- Level 4: Snow (drifting snowflakes)
+- Level 5: Storm (heavy rain + wind + lightning flashes)
 
-## Code Architecture
+### Visual Effects
+- **Day/Night Cycle**: Sky color shifts smoothly, stars fade in/out
+- **Parallax Scrolling**: Mountains (0.25x), clouds (0.15x), stars (0.05x)
+- **Screen Shake**: On enemy stomp, dash, taking damage, flagpole reach
+- **Particle System**: Burst (coins/enemies), dust (landing), spark (dash/wall-jump)
+- **Character Trail**: Motion blur effect when dashing or running fast
+- **Enemy AI**: Eyes track player, occasional blinking, death squash animation
 
-### Initialization & Setup
+### Level Progression
+- 5 levels with increasing length, enemies, canyons, platforms, and power-ups
+- Moving platforms introduced at level 3+
+- Background details (flowers, grass, rocks, mushrooms) increase per level
+- High score persisted to localStorage
 
-**preload()** (lines 63-71): Loads all sound effects before game starts
-**setup()** (lines 73-99): Creates responsive canvas, detects mobile, starts background music, initializes stars
-**initializeLevel()** (lines 101-221): Generates level content procedurally based on difficulty
-
-### Main Game Loop
-
-**draw()** (lines 223-283): Core game loop with state-based rendering
-- Draws gradient background and parallax stars
-- Routes to appropriate screen based on gameState
-- Renders all game objects with camera translation
-- Updates physics, collisions, and game logic
-- Draws UI and mobile controls
-
-### Camera System
-Smooth camera following with lerp interpolation (sketch.js:698-703):
-- Camera targets player position offset by 1/3 screen width
-- Smooth following using `lerp()` for cinematic feel
-- Constrained to level boundaries
-- Parallax scrolling for mountains (0.3x speed) and stars (0.1x speed)
-
-### Physics & Movement
-**updatePhysics()** (lines 651-696):
-- Horizontal movement at 5 pixels/frame
-- Gravity at 4 pixels/frame
-- Jump height of 160 pixels
-- Platform collision detection with 10px tolerance
-- Canyon plummeting with 1.5x gravity
-
-**Platform Collision** (lines 665-676):
-- Checks if character is within platform bounds
-- 10px vertical tolerance for smooth landing
-- Only activates when falling downward
-
-### Collision Detection System
-**checkCollisions()** (lines 718-786) handles all collision types:
-
-1. **Canyon Collision** (lines 720-726): Falls into gaps
-2. **Collectable Collision** (lines 729-739): +10 points, particles, sound
-3. **Enemy Collision** (lines 742-751): Loses life if not invincible
-4. **Power-up Collision** (lines 754-774): Activates power-up effect
-5. **Flagpole Collision** (lines 777-785): Level completion with 30px radius
-
-### Enemy AI
-Moving spiky ball enemies (sketch.js:463-503):
-- Patrol within 200px range from spawn point
-- Speed increases with level difficulty (sketch.js:181)
-- Bounce back when reaching range limits (sketch.js:469-471)
-- Rotating spikes for visual appeal (sketch.js:485-490)
-
-### Responsive Design
-
-**Mobile Detection** (line 79): Uses user agent string to detect mobile devices
-
-**Touch Controls** (lines 1032-1069):
-- Left/Right buttons for movement
-- Large jump button (1.2x size)
-- Visual feedback when buttons pressed
-- Multi-touch support for simultaneous actions
-
-**Window Resizing** (lines 1071-1074):
-- Canvas resizes to fit screen (max 1024x576)
-- Floor position recalculated on resize
-- Orientation change handling in index.html
-
-## Sound System
-
-All sounds loaded in preload() to prevent playback issues:
-- `backgroundMusic`: Loops at 30% volume throughout game
-- `jumpSound`: Plays on jump
-- `collectSound`: Plays when collecting coins
-- `levelCompleteSound`: Plays on flagpole reach
-- `gameOverSound`: Plays when losing life
-- `walkSound`: Available but not currently used
-
-Sound files required:
-- lifelike-126735.mp3 (background music)
-- cartoon-jump-6462.mp3
-- collect-5930.mp3
-- goodresult-82807.mp3
-- negative_beeps-6008.mp3
-- running-in-grass-6237.mp3
-
-## Visual Enhancements
-
-**Gradient Sky** (lines 285-294): Smooth color transition from dark to light blue
-**Twinkling Stars** (lines 296-307): Animated background with sin-wave brightness
-**Parallax Scrolling**: Mountains (0.3x), Stars (0.1x) for depth perception
-**Floating Animations**: Coins and power-ups bob up and down (sketch.js:397-398, 427-428)
-**Character Animation**: Different sprites for standing, walking, jumping in all directions
-**Invincibility Effect**: Purple aura that flashes (sketch.js:539-544)
-
-## Controls
-
-**Keyboard (Desktop):**
-- A/D: Move left/right
-- W: Jump
-- P: Pause/Resume
-- SPACE: Start game, advance levels
-
-**Touch (Mobile):**
-- Left/Right arrow buttons: Movement
-- Jump button: Jump
-- Tap screen: Start/advance in menus
-- Fullscreen button (top-right): Toggle fullscreen mode
-
-## Level Design
-
-Levels are procedurally generated with these parameters:
-- **Level 1**: 2500px long, 10 collectables, 3 enemies, 3 canyons
-- **Level 2**: 3000px long, 12 collectables, 4 enemies, 4 canyons, 2 platforms, 2 power-ups
-- **Level 3**: 3500px long, 14 collectables, 5 enemies, 5 canyons, 3 platforms, 2 power-ups
-- **Level 4**: 4000px long, 16 collectables, 6 enemies, 6 canyons, 4 platforms, 2 power-ups
-- **Level 5**: 4500px long, 18 collectables, 7 enemies, 7 canyons, 5 platforms, 2 power-ups
-
-Safe spacing ensures canyons don't spawn too close together (200-400px gaps).
-
-## HTML Features
-
-**Mobile Optimizations:**
-- Viewport meta tag prevents zooming
-- Touch callout prevention
-- Text selection disabled for game-like feel
-- Context menu disabled on long press
-- Scroll prevention for touch events
-
-**Loading Screen:** Animated spinner shows while assets load (index.html:136-139)
-**Fullscreen Support:** Button for mobile users to enter fullscreen (index.html:141)
-**Responsive Styling:** Canvas scales to fit screen with professional shadows
-
-## Performance Considerations
-
-- Particles automatically removed when life reaches 0 (sketch.js:628-630)
-- Drawing optimized with push/pop for transformations
-- Collision detection uses distance-based checks (efficient)
-- Enemy movement calculated in draw loop (no separate update needed)
-- Maximum particle count naturally limited by lifetime
-
-## Known Improvements from Original
-
-**Fixed bugs:**
-- Camera logic corrected (now smoothly follows player)
-- Flagpole detection improved (30px radius instead of exact 17px)
-- Typos fixed (falgpoleDist → flagpoleDist)
-- Canyon collision simplified and more reliable
-
-**Added features:**
-- Multi-level progression system
-- Lives and respawn mechanics
-- Power-ups with multiple types
-- Particle effects system
-- Mobile touch controls
-- Pause functionality
-- Menu and game state system
-- Platform jumping mechanics
-- Improved enemy visuals (spiky balls)
-- Better coin appearance (rotating gold coins)
-- Smooth camera following
-- Parallax backgrounds
-- Invincibility frames
-- Professional UI
-- Loading screen
-- Responsive design
+## Sound Files
+- `lifelike-126735.mp3` — Background music (loops at 30% volume)
+- `cartoon-jump-6462.mp3` — Jump sound
+- `collect-5930.mp3` — Coin/power-up collection
+- `goodresult-82807.mp3` — Level complete
+- `negative_beeps-6008.mp3` — Lose life / game over
+- `running-in-grass-6237.mp3` — Walk sound (loaded but available for future use)
