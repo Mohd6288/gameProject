@@ -80,13 +80,21 @@ const CONFIG = {
 // ═══════════════════════════════════════════════════════════
 
 // --- Core state ---
-let gameState = 'menu'; // menu | playing | paused | gameOver | levelComplete
+let gameState = 'login'; // login | menu | playing | paused | gameOver | levelComplete | leaderboard
 let currentLevel = 1;
 let lives = 3;
 let gameScore = 0;
 let highScore = 0;
 let levelStartTime = 0;
 let frameCounter = 0;
+
+// --- Player profile ---
+let playerName = '';
+let nameInput = null;
+let leaderboard = []; // Array of { name, score, level, date }
+const MAX_LEADERBOARD = 10;
+const STORAGE_KEY_LB = 'platformAdventureLeaderboard';
+const STORAGE_KEY_NAME = 'platformAdventurePlayerName';
 
 // --- Character ---
 let char = {
@@ -185,12 +193,45 @@ function setup() {
 
     floorPos_y = height * 3 / 4;
 
-    // Load high score from localStorage
-    let saved = localStorage.getItem('platformAdventureHighScore');
-    if (saved) highScore = parseInt(saved);
+    // Load saved data
+    loadLeaderboard();
+    let savedName = localStorage.getItem(STORAGE_KEY_NAME);
+    if (savedName) {
+        playerName = savedName;
+        gameState = 'menu'; // Skip login if we remember the name
+    }
+    let savedHS = localStorage.getItem('platformAdventureHighScore');
+    if (savedHS) highScore = parseInt(savedHS);
+
+    // Create the hidden HTML text input for name entry
+    nameInput = createInput('');
+    nameInput.attribute('maxlength', '12');
+    nameInput.attribute('placeholder', 'Your name...');
+    nameInput.style('position', 'absolute');
+    nameInput.style('font-size', '22px');
+    nameInput.style('text-align', 'center');
+    nameInput.style('width', '220px');
+    nameInput.style('padding', '8px 12px');
+    nameInput.style('border', '2px solid rgba(255,215,0,0.6)');
+    nameInput.style('border-radius', '8px');
+    nameInput.style('background', 'rgba(20,20,50,0.9)');
+    nameInput.style('color', '#FFD700');
+    nameInput.style('outline', 'none');
+    nameInput.style('font-family', 'inherit');
+    nameInput.style('letter-spacing', '1px');
+    repositionNameInput();
+    if (gameState !== 'login') nameInput.hide();
 
     initStars();
     initializeLevel(currentLevel);
+}
+
+function repositionNameInput() {
+    if (!nameInput) return;
+    let cnv = document.querySelector('canvas');
+    if (!cnv) return;
+    let rect = cnv.getBoundingClientRect();
+    nameInput.position(rect.left + rect.width / 2 - 110, rect.top + rect.height / 2 + 10);
 }
 
 function draw() {
@@ -210,6 +251,16 @@ function draw() {
     drawStars();
 
     // State routing
+    if (gameState === 'login') {
+        drawLoginScreen();
+        pop();
+        return;
+    }
+    if (gameState === 'leaderboard') {
+        drawLeaderboardScreen();
+        pop();
+        return;
+    }
     if (gameState === 'menu') {
         drawMenu();
         pop();
@@ -1680,6 +1731,155 @@ function drawLevelCompleteScreen() {
 }
 
 
+function drawLoginScreen() {
+    push();
+    background(15, 15, 40);
+
+    // Floating background particles
+    for (let i = 0; i < 30; i++) {
+        let px = (frameCounter * 0.3 + i * 60) % (width + 80) - 40;
+        let py = height / 2 + sin(frameCounter * 0.015 + i * 0.8) * 200;
+        fill(255, 215, 0, 15 + sin(frameCounter * 0.04 + i) * 10);
+        noStroke();
+        ellipse(px, py, 3 + sin(i) * 1.5);
+    }
+
+    textAlign(CENTER, CENTER);
+
+    // Title
+    fill(255, 215, 0);
+    textSize(48);
+    text('PLATFORM', width / 2, height / 5);
+    textSize(36);
+    text('ADVENTURE', width / 2, height / 5 + 48);
+
+    // Welcome prompt
+    fill(220, 220, 240);
+    textSize(20);
+    text('Enter your name to begin', width / 2, height / 2 - 40);
+
+    // The HTML input is positioned over the canvas (handled in setup)
+
+    // Submit hint
+    fill(180, 180, 200);
+    textSize(15);
+    let blink = sin(frameCounter * 0.06) * 0.3 + 0.7;
+    fill(255, 255, 255, 200 * blink);
+    text('Press ENTER to continue', width / 2, height / 2 + 70);
+
+    // Character avatar
+    push();
+    translate(width / 2, height / 2 + 150);
+    scale(1.5);
+    noStroke();
+    fill(60, 60, 90);
+    rect(-4, 0, 6, 12, 2);
+    rect(2, 0, 6, 12, 2);
+    fill(80, 80, 140);
+    rect(-6, -22, 12, 23, 3);
+    fill(220, 185, 155);
+    ellipse(0, -28, 14, 16);
+    fill(60, 40, 25);
+    arc(0, -32, 16, 10, PI, TWO_PI);
+    fill(255);
+    ellipse(2, -29, 4, 5);
+    fill(40, 60, 100);
+    ellipse(2.5, -29, 2, 3);
+    pop();
+
+    pop();
+}
+
+function drawLeaderboardScreen() {
+    push();
+    background(15, 15, 40);
+
+    textAlign(CENTER, CENTER);
+
+    // Title
+    fill(255, 215, 0);
+    textSize(40);
+    text('LEADERBOARD', width / 2, 50);
+
+    // Trophy icon
+    textSize(30);
+    text('🏆', width / 2, 90);
+
+    // Table header
+    let tableX = width / 2;
+    let startY = 130;
+    let rowH = 32;
+
+    fill(100, 100, 150);
+    textSize(13);
+    text('RANK', tableX - 160, startY);
+    text('PLAYER', tableX - 60, startY);
+    text('SCORE', tableX + 50, startY);
+    text('LEVEL', tableX + 130, startY);
+
+    // Divider
+    stroke(100, 100, 150, 80);
+    strokeWeight(1);
+    line(tableX - 200, startY + 14, tableX + 200, startY + 14);
+    noStroke();
+
+    // Rows
+    if (leaderboard.length === 0) {
+        fill(150, 150, 170);
+        textSize(16);
+        text('No scores yet. Be the first!', width / 2, startY + 60);
+    } else {
+        for (let i = 0; i < min(leaderboard.length, MAX_LEADERBOARD); i++) {
+            let entry = leaderboard[i];
+            let y = startY + 20 + (i + 1) * rowH;
+
+            // Highlight current player
+            let isMe = entry.name === playerName;
+            if (isMe) {
+                fill(255, 215, 0, 20);
+                noStroke();
+                rect(tableX - 200, y - 12, 400, rowH - 2, 6);
+            }
+
+            textSize(15);
+
+            // Rank with medal
+            if (i === 0) fill(255, 215, 0);
+            else if (i === 1) fill(192, 192, 200);
+            else if (i === 2) fill(205, 127, 50);
+            else fill(200, 200, 220);
+
+            let medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i + 1);
+            text(medal, tableX - 160, y);
+
+            // Name
+            fill(isMe ? color(255, 215, 0) : color(230, 230, 245));
+            text(entry.name, tableX - 60, y);
+
+            // Score
+            fill(200, 220, 255);
+            text(entry.score, tableX + 50, y);
+
+            // Level
+            fill(180, 200, 180);
+            text(entry.level + '/' + CONFIG.MAX_LEVEL, tableX + 130, y);
+        }
+    }
+
+    // Navigation
+    let blink = sin(frameCounter * 0.06) * 0.3 + 0.7;
+    fill(255, 255, 255, 200 * blink);
+    textSize(16);
+    text(isMobile ? 'TAP to go back' : 'Press SPACE or ESC to go back', width / 2, height - 40);
+
+    // Current player tag
+    fill(150, 150, 180);
+    textSize(12);
+    text('Playing as: ' + playerName, width / 2, height - 65);
+
+    pop();
+}
+
 // ═══════════════════════════════════════════════════════════
 // 9. PHYSICS & MOVEMENT
 // ═══════════════════════════════════════════════════════════
@@ -1994,6 +2194,7 @@ function loseLife() {
     } else {
         gameState = 'gameOver';
         updateHighScore();
+        saveToLeaderboard();
     }
 }
 
@@ -2060,9 +2261,61 @@ function advanceLevel() {
         gameState = 'playing';
     } else {
         updateHighScore();
+        saveToLeaderboard();
         currentLevel = 1;
         gameState = 'menu';
     }
+}
+
+// --- Login / Player name ---
+function submitLogin() {
+    let name = nameInput.value().trim();
+    if (name.length === 0) return;
+    // Sanitize: alphanumeric, spaces, underscores, hyphens only
+    name = name.replace(/[^a-zA-Z0-9 _-]/g, '').substring(0, 12);
+    if (name.length === 0) return;
+
+    playerName = name;
+    localStorage.setItem(STORAGE_KEY_NAME, playerName);
+    nameInput.hide();
+    gameState = 'menu';
+}
+
+// --- Leaderboard persistence ---
+function loadLeaderboard() {
+    let data = localStorage.getItem(STORAGE_KEY_LB);
+    if (data) {
+        try {
+            leaderboard = JSON.parse(data);
+        } catch (e) {
+            leaderboard = [];
+        }
+    }
+}
+
+function saveLeaderboard() {
+    localStorage.setItem(STORAGE_KEY_LB, JSON.stringify(leaderboard));
+}
+
+function saveToLeaderboard() {
+    if (!playerName || gameScore <= 0) return;
+
+    leaderboard.push({
+        name: playerName,
+        score: gameScore,
+        level: currentLevel,
+        date: new Date().toISOString().split('T')[0],
+    });
+
+    // Sort by score descending
+    leaderboard.sort((a, b) => b.score - a.score);
+
+    // Keep only top entries
+    if (leaderboard.length > MAX_LEADERBOARD) {
+        leaderboard = leaderboard.slice(0, MAX_LEADERBOARD);
+    }
+
+    saveLeaderboard();
 }
 
 
@@ -2190,6 +2443,22 @@ function updateWeather() {
 // ═══════════════════════════════════════════════════════════
 
 function keyPressed() {
+    // --- Login screen ---
+    if (gameState === 'login') {
+        if (keyCode === ENTER) {
+            submitLogin();
+        }
+        return; // Don't process other keys during login (HTML input handles them)
+    }
+
+    // --- Leaderboard screen ---
+    if (gameState === 'leaderboard') {
+        if (key === ' ' || keyCode === 32 || keyCode === ESCAPE) {
+            gameState = 'menu';
+        }
+        return;
+    }
+
     // --- Menu / Screen state transitions ---
     if (key === ' ' || keyCode === 32) {
         if (gameState === 'menu') {
@@ -2200,6 +2469,23 @@ function keyPressed() {
             return;
         } else if (gameState === 'levelComplete') {
             advanceLevel();
+            return;
+        }
+    }
+
+    // Menu-only shortcuts
+    if (gameState === 'menu') {
+        if (key === 'l' || key === 'L') {
+            gameState = 'leaderboard';
+            return;
+        }
+        if (key === 'n' || key === 'N') {
+            // Change name
+            gameState = 'login';
+            nameInput.value(playerName);
+            nameInput.show();
+            repositionNameInput();
+            nameInput.elt.focus();
             return;
         }
     }
@@ -2250,6 +2536,10 @@ function keyReleased() {
 
 // --- Touch controls ---
 function touchStarted() {
+    // Login — let the HTML input handle touches
+    if (gameState === 'login') return true;
+    // Leaderboard — tap to go back
+    if (gameState === 'leaderboard') { gameState = 'menu'; return false; }
     // Menu/screen taps
     if (gameState === 'menu') { startGame(); return false; }
     if (gameState === 'gameOver') { gameState = 'menu'; return false; }
@@ -2355,4 +2645,5 @@ function drawMobileControls() {
 function windowResized() {
     resizeCanvas(min(windowWidth, CONFIG.MAX_CANVAS_W), min(windowHeight, CONFIG.MAX_CANVAS_H));
     floorPos_y = height * 3 / 4;
+    repositionNameInput();
 }
